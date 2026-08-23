@@ -1,0 +1,132 @@
+import { useState } from 'react';
+import { View, Text, TouchableOpacity, Alert, ScrollView, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import LinearGradient from 'react-native-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Card from '../components/ui/Card';
+import Input from '../components/ui/Input';
+import Button from '../components/ui/Button';
+import { useVisitorStore } from '../store/useVisitorStore';
+import { api } from '../api/client';
+import { Colors } from '../constants/colors';
+import type { RootStackParamList } from '../navigation/AppNavigator';
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+const fmtDate = (d: Date) => d.toISOString().slice(0, 19); // "2026-07-04T00:32:00" — no Z, no ms
+
+export default function DetailsScreen() {
+  const nav = useNavigation<Nav>();
+  const { phone, email, photoBase64, reset } = useVisitorStore();
+
+  const [profile, setProfile] = useState({ name: '', organisation: '', gender: 'male', vehicleNumber: '' });
+  const [visit, setVisit] = useState({ companyId: '', departmentId: '', purpose: '' });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!profile.name || !profile.organisation || !visit.companyId || !visit.departmentId || !visit.purpose)
+      return Alert.alert('Error', 'Please fill all required fields');
+
+    const companyId = parseInt(visit.companyId);
+    const deptId = parseInt(visit.departmentId);
+    if (isNaN(companyId) || isNaN(deptId))
+      return Alert.alert('Error', 'Company ID and Department ID must be numbers');
+
+    setLoading(true);
+
+    // ─── STEP 1: CREATE VISITOR ───
+    const visitorBody = {
+      name: profile.name,
+      gender: profile.gender,
+      email,
+      phone,
+      organisation: profile.organisation,
+      photo: 'data:image/jpeg;base64,test', // small test photo
+    };
+
+    Alert.alert('STEP 1: /visitors', JSON.stringify(visitorBody, null, 2).slice(0, 400));
+
+    let visitorId: number;
+    try {
+      const vRes = await api.post('/visitors', visitorBody);
+      visitorId = vRes.data.id;
+      Alert.alert('✅ Visitor OK', `ID: ${visitorId}`);
+    } catch (e: any) {
+      Alert.alert('❌ Visitor FAILED', `Status: ${e.response?.status}\nBody: ${JSON.stringify(e.response?.data).slice(0, 400)}`);
+      setLoading(false);
+      return;
+    }
+
+    // ─── STEP 2: CREATE VISIT ───
+    const now = new Date();
+    const visitBody = {
+      visitor: visitorId,
+      company: companyId,
+      department: deptId,
+      purpose: visit.purpose,
+      tm_in: fmtDate(now),
+      tm_out: fmtDate(new Date(now.getTime() + 2 * 60 * 60 * 1000)),
+      badge: 'V-' + visitorId,
+      otp: String(Math.floor(100000 + Math.random() * 900000)),
+      entry_gate: 'Main',
+      exit_gate: 'Main',
+      vehicle_number: profile.vehicleNumber || 'NA',
+      vehicle_type: 'Car',
+      // NO status field — let backend use default: pending
+    };
+
+    Alert.alert('STEP 2: /visits', JSON.stringify(visitBody, null, 2).slice(0, 400));
+
+    try {
+      const visitRes = await api.post('/visits', visitBody);
+      Alert.alert('✅ Visit OK', `ID: ${visitRes.data.id}`);
+      reset();
+      nav.navigate('Waiting', { visitId: visitRes.data.id });
+    } catch (e: any) {
+      Alert.alert('❌ Visit FAILED', `Status: ${e.response?.status}\nBody: ${JSON.stringify(e.response?.data).slice(0, 400)}`);
+    }
+
+    setLoading(false);
+  };
+
+  return (
+    <LinearGradient colors={['#0f172a', '#080c14']} style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 48 }}>
+          <TouchableOpacity onPress={() => nav.goBack()} style={{ marginBottom: 28 }}>
+            <Text style={{ color: Colors.muted, fontSize: 14 }}>← Back</Text>
+          </TouchableOpacity>
+
+          <View style={{ marginBottom: 24 }}>
+            <Text style={styles.step}>STEP 3 OF 3</Text>
+            <Text style={styles.title}>Visit Details</Text>
+          </View>
+
+          <Card style={{ marginBottom: 16 }}>
+            <Text style={styles.section}>VISITOR PROFILE</Text>
+            <Input label="Full Name *" value={profile.name} onChangeText={(t) => setProfile(p => ({ ...p, name: t }))} placeholder="John Doe" />
+            <Input label="Organization *" value={profile.organisation} onChangeText={(t) => setProfile(p => ({ ...p, organisation: t }))} placeholder="Acme Corp" />
+            <Input label="Vehicle Number (optional)" value={profile.vehicleNumber} onChangeText={(t) => setProfile(p => ({ ...p, vehicleNumber: t }))} placeholder="KA 01 AB 1234" />
+            <Input label="Phone" value={phone} editable={false} style={{ opacity: 0.5 }} />
+          </Card>
+
+          <Card style={{ marginBottom: 24 }}>
+            <Text style={styles.section}>THIS VISIT</Text>
+            <Input label="Company ID *" value={visit.companyId} onChangeText={(t) => setVisit(v => ({ ...v, companyId: t }))} placeholder="1" keyboardType="number-pad" />
+            <Input label="Department ID *" value={visit.departmentId} onChangeText={(t) => setVisit(v => ({ ...v, departmentId: t }))} placeholder="2" keyboardType="number-pad" />
+            <Input label="Purpose *" value={visit.purpose} onChangeText={(t) => setVisit(v => ({ ...v, purpose: t }))} placeholder="Meeting / Interview" />
+          </Card>
+
+          <Button label={loading ? 'Submitting...' : 'Submit Visit Request →'} onPress={handleSubmit} loading={loading} />
+        </ScrollView>
+      </SafeAreaView>
+    </LinearGradient>
+  );
+}
+
+const styles = StyleSheet.create({
+  step: { fontSize: 11, color: Colors.accent, fontFamily: 'monospace', letterSpacing: 2, marginBottom: 8 },
+  title: { fontSize: 26, fontWeight: '800', color: Colors.text, marginBottom: 4 },
+  section: { fontSize: 10, color: Colors.accent, fontFamily: 'monospace', letterSpacing: 2, marginBottom: 14 },
+});

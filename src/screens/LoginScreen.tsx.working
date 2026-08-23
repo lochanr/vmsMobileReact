@@ -1,0 +1,64 @@
+import { useState } from 'react';
+import { View, Text, Alert, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import Screen from '../components/layout/Screen';
+import Card from '../components/ui/Card';
+import Input from '../components/ui/Input';
+import Button from '../components/ui/Button';
+import { api } from '../api/client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Colors } from '../constants/colors';
+import type { RootStackParamList } from '../navigation/AppNavigator';
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+export default function LoginScreen() {
+  const nav = useNavigation<Nav>();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) return Alert.alert('Error', 'Enter email and password');
+    setLoading(true);
+    try {
+      const { data } = await api.post('/auth/login', { email, password });
+      await AsyncStorage.setItem('access_token', data.access_token);
+      await AsyncStorage.setItem('refresh_token', data.refresh_token);
+
+      // Fetch user to determine role
+      const users = await api.get('/users');
+      const me = users.data.find((u: any) => u.email === email);
+      await AsyncStorage.setItem('user', JSON.stringify(me || {}));
+
+      // Simple role check: if user has roles object with admin flag, or just default to admin view
+      // Adjust this based on your actual roles structure
+      const isAdmin = me?.roles?.is_admin || me?.roles?.includes?.('admin') || false;
+
+      nav.replace(isAdmin ? 'AdminDashboard' : 'StaffDashboard');
+    } catch (e: any) {
+      Alert.alert('Error', e.response?.data?.detail?.[0]?.msg || 'Login failed');
+    }
+    setLoading(false);
+  };
+
+  return (
+    <Screen centered>
+      <View style={{ width: '100%', maxWidth: 360 }}>
+        <Text style={styles.title}>VisitorPass</Text>
+        <Text style={styles.sub}>Staff Login</Text>
+        <Card>
+          <Input label="Email" value={email} onChangeText={setEmail} placeholder="admin@company.com" keyboardType="email-address" autoCapitalize="none" />
+          <Input label="Password" value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry />
+          <Button label={loading ? 'Logging in...' : 'Login →'} onPress={handleLogin} loading={loading} />
+        </Card>
+      </View>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  title: { fontSize: 28, fontWeight: '800', color: Colors.text, textAlign: 'center', marginBottom: 4 },
+  sub: { fontSize: 14, color: Colors.muted, textAlign: 'center', marginBottom: 28 },
+});
