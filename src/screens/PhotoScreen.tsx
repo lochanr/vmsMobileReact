@@ -5,15 +5,28 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Button from '../components/ui/Button';
 import { useVisitorStore } from '../store/useVisitorStore';
+import { API_URL } from '../api/client';
 import { Colors } from '../constants/colors';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+const BASE_DOMAIN = API_URL.replace(/\/vms\/?$/, '');
+
 export default function PhotoScreen() {
   const nav = useNavigation<Nav>();
   const { returningVisitor, setPhoto, photoUri } = useVisitorStore();
   const [captured, setCaptured] = useState(false);
+
+  const existingPhoto = returningVisitor?.photo;
+
+  // Render valid photo path or null
+  const getPhotoUri = (path?: string) => {
+    if (!path || path.includes('default.jpg')) return null;
+    return path.startsWith('http') ? path : `${BASE_DOMAIN}${path.startsWith('/') ? '' : '/'}${path}`;
+  };
+
+  const existingPhotoUri = existingPhoto ? getPhotoUri(existingPhoto) : null;
 
   const requestCameraPermission = async () => {
     if (Platform.OS === 'android') {
@@ -50,17 +63,19 @@ export default function PhotoScreen() {
         Alert.alert('Error', res.errorMessage || 'Camera failed');
         return;
       }
+      
       const asset = res.assets?.[0];
       if (asset?.uri && asset.base64) {
-        setPhoto(asset.uri, `data:image/jpeg;base64,${asset.base64}`);
+        const fullBase64 = `data:image/jpeg;base64,${asset.base64}`;
+        setPhoto(asset.uri, fullBase64);
         setCaptured(true);
       }
     });
   };
 
   const handleUsePrevious = () => {
-    if (returningVisitor) {
-      setPhoto('previous', returningVisitor.photo);
+    if (existingPhotoUri) {
+      setPhoto(existingPhotoUri, '');
       nav.navigate('Details');
     }
   };
@@ -80,7 +95,9 @@ export default function PhotoScreen() {
         <Text style={styles.step}>STEP 2 OF 3</Text>
         <Text style={styles.title}>Visitor Photo</Text>
         {returningVisitor && !captured && (
-          <Text style={{ color: Colors.success, fontSize: 12, marginTop: 4 }}>👋 Welcome back, {returningVisitor.name}!</Text>
+          <Text style={{ color: Colors.success, fontSize: 12, marginTop: 4 }}>
+            👋 Welcome back, {returningVisitor.name}!
+          </Text>
         )}
       </View>
 
@@ -88,8 +105,8 @@ export default function PhotoScreen() {
         <View style={styles.cameraBox}>
           {captured && photoUri ? (
             <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-          ) : returningVisitor && !captured ? (
-            <Image source={{ uri: returningVisitor.photo }} style={[StyleSheet.absoluteFill, { opacity: 0.7 }]} resizeMode="cover" />
+          ) : existingPhotoUri && !captured ? (
+            <Image source={{ uri: existingPhotoUri }} style={[StyleSheet.absoluteFill, { opacity: 0.95 }]} resizeMode="cover" />
           ) : (
             <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1e293b', justifyContent: 'center', alignItems: 'center' }]}>
               <Text style={{ fontSize: 40, color: Colors.muted }}>📷</Text>
@@ -105,7 +122,7 @@ export default function PhotoScreen() {
             <Button label="Continue →" onPress={handleNext} />
             <Button label="↺ Retake" onPress={handleRetake} variant="ghost" />
           </>
-        ) : returningVisitor ? (
+        ) : returningVisitor && existingPhotoUri ? (
           <>
             <Button label="Use Previous Photo" onPress={handleUsePrevious} />
             <Button label="📷 Take New Photo" onPress={handleCapture} variant="ghost" />

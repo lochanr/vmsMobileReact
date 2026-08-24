@@ -129,6 +129,15 @@ export default function Dashboard() {
     deptName: '',
   });
 
+  // Helper to resolve host name from user ID
+  const getHostName = (userId: string | number) => {
+    if (!userId) return 'N/A';
+    const foundUser = usersList.find(
+      (u) => String(u.user_id || u.id) === String(userId)
+    );
+    return foundUser?.full_name || foundUser?.name || foundUser?.username || `User #${userId}`;
+  };
+
   // Fetch Visits & Enrich Visitor Data
   const fetchVisits = useCallback(async () => {
     try {
@@ -138,10 +147,10 @@ export default function Dashboard() {
         ? res.data
         : res.data?.data || [];
 
-      // Filter visits matching logged in user ID
-      const matchingVisits = rawVisits.filter(
-        (v) => String(v.user) === String(currentUserId)
-      );
+      // Admins see all visits; individual users/hosts only see visits assigned to them
+      const matchingVisits = isAdmin
+        ? rawVisits
+        : rawVisits.filter((v) => String(v.user) === String(currentUserId));
 
       // Fetch visitor details dynamically
       const enrichedVisits = await Promise.all(
@@ -166,11 +175,14 @@ export default function Dashboard() {
       setLoadingVisits(false);
       setRefreshing(false);
     }
-  }, [currentUserId]);
+  }, [currentUserId, isAdmin]);
 
   useEffect(() => {
     fetchVisits();
+    fetchUsers();
   }, [fetchVisits]);
+
+  
 
   // Handle Approve Action
   const handleApproveVisit = async (visitId: number | string) => {
@@ -387,60 +399,79 @@ export default function Dashboard() {
   }, [usersList, searchQuery, selectedRoleFilter]);
 
   const renderVisitCard = (visit: VisitItem) => {
-    const visitorName =
-      visit.visitorDetails?.full_name || visit.visitorDetails?.name || `Visitor #${visit.visitor}`;
-    const visitorPhone =
-      visit.visitorDetails?.phone_number || visit.visitorDetails?.phone || 'No phone';
-    const photoUrl = visit.visitorDetails?.photo_url;
-    const isPending = visit.status?.toLowerCase() === 'pending';
-    const isApproved = visit.status?.toLowerCase() === 'approved';
-    const isActioning = actionVisitId === visit.id;
+  const visitorName =
+    visit.visitorDetails?.full_name || visit.visitorDetails?.name || `Visitor #${visit.visitor}`;
+  const visitorPhone =
+    visit.visitorDetails?.phone_number || visit.visitorDetails?.phone || 'No phone';
+  const photoUrl = visit.visitorDetails?.photo_url;
+  const isPending = visit.status?.toLowerCase() === 'pending';
+  const isApproved = visit.status?.toLowerCase() === 'approved';
+  const isActioning = actionVisitId === visit.id;
 
-    return (
-      <View key={visit.id} style={styles.visitCard}>
-        <View style={styles.visitHeader}>
-          <View style={styles.visitorMetaLeft}>
-            {photoUrl ? (
-              <Image source={{ uri: photoUrl }} style={styles.visitorAvatarImage} />
-            ) : (
-              <View style={styles.visitorAvatarPlaceholder}>
-                <Text style={styles.visitorAvatarText}>
-                  {visitorName.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
-            <View>
-              <Text style={styles.visitorName}>{visitorName}</Text>
-              <Text style={styles.visitorSubText}>{visitorPhone}</Text>
+  return (
+    <View key={visit.id} style={styles.visitCard}>
+      {/* Header Row */}
+      <View style={styles.visitHeader}>
+        <View style={styles.visitorMetaLeft}>
+          {photoUrl ? (
+            <Image source={{ uri: photoUrl }} style={styles.visitorAvatarImage} />
+          ) : (
+            <View style={styles.visitorAvatarPlaceholder}>
+              <Text style={styles.visitorAvatarText}>
+                {visitorName.charAt(0).toUpperCase()}
+              </Text>
             </View>
+          )}
+          <View>
+            <Text style={styles.visitorName}>{visitorName}</Text>
+            <Text style={styles.visitorSubText}>{visitorPhone}</Text>
           </View>
+        </View>
 
-          <View
+        <View
+          style={[
+            styles.statusBadge,
+            isPending && styles.statusPending,
+            isApproved && styles.statusApproved,
+            !isPending && !isApproved && styles.statusRejected,
+          ]}
+        >
+          <Text
             style={[
-              styles.statusBadge,
-              isPending && styles.statusPending,
-              isApproved && styles.statusApproved,
-              !isPending && !isApproved && styles.statusRejected,
+              styles.statusBadgeText,
+              isPending && styles.statusPendingText,
+              isApproved && styles.statusApprovedText,
+              !isPending && !isApproved && styles.statusRejectedText,
             ]}
           >
-            <Text
-              style={[
-                styles.statusBadgeText,
-                isPending && styles.statusPendingText,
-                isApproved && styles.statusApprovedText,
-                !isPending && !isApproved && styles.statusRejectedText,
-              ]}
-            >
-              {visit.status?.toUpperCase()}
+            {visit.status?.toUpperCase()}
+          </Text>
+        </View>
+      </View>
+
+      {/* Clean 2-Row Details Block */}
+      <View style={styles.visitDetailsBlock}>
+        {/* Row 1: Host & Purpose */}
+        <View style={styles.detailRow}>
+          <View style={[styles.visitDetailItem, { flex: 1 }]}>
+            <Text style={styles.detailLabel}>Host</Text>
+            <Text style={styles.detailValue} numberOfLines={1}>
+              {getHostName(visit.user)}
+            </Text>
+          </View>
+
+          <View style={[styles.visitDetailItem, { flex: 1 }]}>
+            <Text style={styles.detailLabel}>Purpose</Text>
+            <Text style={styles.detailValue} numberOfLines={1}>
+              {visit.purpose || 'N/A'}
             </Text>
           </View>
         </View>
 
-        <View style={styles.visitDetailsGrid}>
-          <View style={styles.visitDetailItem}>
-            <Text style={styles.detailLabel}>Purpose</Text>
-            <Text style={styles.detailValue}>{visit.purpose || 'N/A'}</Text>
-          </View>
+        <View style={styles.detailDivider} />
+
+        {/* Row 2: Timing & Gate */}
+        <View style={styles.detailRow}>
           <View style={styles.visitDetailItem}>
             <Text style={styles.detailLabel}>Gate</Text>
             <Text style={styles.detailValue}>{visit.entry_gate || 'Main Gate'}</Text>
@@ -458,34 +489,35 @@ export default function Dashboard() {
             </Text>
           </View>
         </View>
-
-        {/* Action Controls for Pending Items */}
-        {isPending && (
-          <View style={styles.actionButtonRow}>
-            {isActioning ? (
-              <ActivityIndicator color="#0A84FF" style={{ width: '100%', marginVertical: 8 }} />
-            ) : (
-              <>
-                <TouchableOpacity
-                  style={[styles.decisionBtn, styles.approveBtn]}
-                  onPress={() => handleApproveVisit(visit.id)}
-                >
-                  <Text style={styles.decisionBtnText}>✓ Approve</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.decisionBtn, styles.rejectBtn]}
-                  onPress={() => handleRejectVisit(visit.id)}
-                >
-                  <Text style={styles.decisionBtnText}>✕ Reject</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        )}
       </View>
-    );
-  };
+
+      {/* Action Controls for Pending Items */}
+      {isPending && (
+        <View style={styles.actionButtonRow}>
+          {isActioning ? (
+            <ActivityIndicator color="#0A84FF" style={{ width: '100%', marginVertical: 8 }} />
+          ) : (
+            <>
+              <TouchableOpacity
+                style={[styles.decisionBtn, styles.approveBtn]}
+                onPress={() => handleApproveVisit(visit.id)}
+              >
+                <Text style={styles.decisionBtnText}>✓ Approve</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.decisionBtn, styles.rejectBtn]}
+                onPress={() => handleRejectVisit(visit.id)}
+              >
+                <Text style={styles.decisionBtnText}>✕ Reject</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      )}
+    </View>
+  );
+};
 
   return (
     <Screen scroll={false}>
@@ -945,12 +977,15 @@ const styles = StyleSheet.create({
   detailLabel: {
     color: '#8E8E93',
     fontSize: 10,
+    fontWeight: '500',
     marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   detailValue: {
     color: '#FFF',
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   actionButtonRow: {
     flexDirection: 'row',
@@ -1251,5 +1286,23 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  visitDetailsBlock: {
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  detailDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    marginVertical: 2,
   },
 });

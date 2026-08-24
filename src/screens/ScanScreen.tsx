@@ -70,20 +70,9 @@ export default function ScanScreen() {
     setIsPermissionChecked(true);
   };
 
-  // Parse JSON QR payload to extract `visit_id`
-  const extractVisitId = (data: string): string => {
-    try {
-      const parsed = JSON.parse(data);
-      if (parsed.id) {
-        return parsed.id;
-      }
-    } catch (e) {
-      // Data is a raw string ID
-    }
-    return data;
-  };
-
   // Process API Scan Endpoint
+  // Replace your existing handleScanData function with this:
+
   const handleScanData = async (rawValue: string) => {
     if (scanned || loading) return;
 
@@ -92,10 +81,12 @@ export default function ScanScreen() {
     setErrorMessage(null);
     setScanResult(null);
 
-    const visitId = extractVisitId(rawValue);
-
     try {
-      const response = await api.post('/visits/scan', { visit_id: visitId });
+      // Send full raw JSON string to backend as qr_payload
+      const response = await api.post('/visits/scan', { 
+        qr_payload: rawValue 
+      });
+      
       setScanResult(response.data);
       setModalVisible(true);
     } catch (error: any) {

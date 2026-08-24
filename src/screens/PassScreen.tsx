@@ -143,7 +143,6 @@ export default function PassScreen() {
             <View style={{ padding: 20 }}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
                 {[
-                  ['Pass ID', String(idToDisplay)],
                   ['Company', String(resolvedCompany)],
                   ['Department', String(resolvedDepartment)],
                   ['Purpose', String(purpose)],
@@ -164,8 +163,8 @@ export default function PassScreen() {
               <View style={styles.qrBox}>
                 <QRCode value={qrData} size={100} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.qrLabel}>SCAN AT KIOSK TO VERIFY</Text>
-                  <Text style={styles.qrId}>{idToDisplay}</Text>
+                  <Text style={styles.qrLabel}>SCAN AT KIOSK TO CHECK-IN / CHECK-OUT</Text>
+              
                 </View>
               </View>
             </View>

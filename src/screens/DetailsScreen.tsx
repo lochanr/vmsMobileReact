@@ -167,11 +167,12 @@ export default function DetailsScreen() {
         email: email,
         phone: phone,
         organisation: profile.companyName || 'N/A',
-        photo: photoBase64 || 'string',
+        photo: photoBase64,
       };
 
       const visitorRes = await api.post('/visitors', visitorPayload);
       const visitorId = visitorRes.data?.id;
+      const visitorPhotoPath = visitorRes.data?.photo;
 
       if (!visitorId) {
         throw new Error('Failed to obtain visitor ID from server');
@@ -193,7 +194,7 @@ export default function DetailsScreen() {
         tm_in: currentTimeISO,
         tm_out: currentTimeISO,
         status: 'pending',
-        badge: 'string',
+        badge: visitorPhotoPath || '/uploads/default.jpg',
         otp: 'VERIFIED',
         entry_gate: entryGate || 'Main Gate',
         exit_gate: 'N/A',

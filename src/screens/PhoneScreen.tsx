@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Alert, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Screen from '../components/layout/Screen';
@@ -7,11 +7,14 @@ import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import { useVisitorStore } from '../store/useVisitorStore';
-import { api } from '../api/client';
+import { api, API_URL } from '../api/client';
 import { Colors } from '../constants/colors';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+// Base domain without /vms path suffix for static file check
+const BASE_DOMAIN = API_URL.replace(/\/vms\/?$/, '');
 
 export default function PhoneScreen() {
   const nav = useNavigation<Nav>();
@@ -23,7 +26,6 @@ export default function PhoneScreen() {
   const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Request OTP from Backend API
   const handleSendOtp = async () => {
     if (!phone.trim()) return Alert.alert('Error', 'Enter phone number');
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -32,7 +34,6 @@ export default function PhoneScreen() {
 
     setLoading(true);
     try {
-      // API call to send OTP to visitor's email
       await api.post('/otp/send', { email, phone });
       setOtpSent(true);
       Alert.alert('Success', `OTP sent to ${email}`);
@@ -44,7 +45,6 @@ export default function PhoneScreen() {
     }
   };
 
-  // Validate OTP with Backend API
   const handleVerifyOtp = async () => {
     if (!otp.trim() || otp.length < 4) {
       return Alert.alert('Error', 'Please enter a valid OTP');
@@ -52,12 +52,43 @@ export default function PhoneScreen() {
 
     setLoading(true);
     try {
-      // API call to verify the entered OTP
       await api.post('/otp/verify', { email, otp });
 
       setPhone(phone);
       setEmail(email);
-      setReturningVisitor(null);
+
+      // Search DB for existing visitor profile
+      try {
+        const searchRes = await api.get(`/visitors/search?phone=${encodeURIComponent(phone.trim())}`);
+        const visitorData = searchRes.data;
+
+        if (visitorData) {
+          const rawPhoto = visitorData.photo || visitorData.photo_path;
+
+          // Check if photo exists and is not default
+          if (rawPhoto && !rawPhoto.includes('default.jpg')) {
+            const photoUrl = rawPhoto.startsWith('http') ? rawPhoto : `${BASE_DOMAIN}${rawPhoto.startsWith('/') ? '' : '/'}${rawPhoto}`;
+            
+            try {
+              // Verify image file exists on server
+              const imgCheck = await fetch(photoUrl, { method: 'HEAD' });
+              if (!imgCheck.ok) {
+                // If 404/file missing on server, set photo to null
+                visitorData.photo = null;
+              }
+            } catch {
+              visitorData.photo = null;
+            }
+          }
+
+          setReturningVisitor(visitorData);
+        } else {
+          setReturningVisitor(null);
+        }
+      } catch {
+        setReturningVisitor(null);
+      }
+
       nav.navigate('Photo');
     } catch (e: any) {
       const msg = e?.response?.data?.detail || e?.message || 'Invalid or expired OTP';
