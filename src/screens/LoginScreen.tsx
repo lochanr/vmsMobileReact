@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, Alert, StyleSheet } from 'react-native';
+import { View, Text, Alert, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Screen from '../components/layout/Screen';
@@ -75,6 +75,9 @@ export default function LoginScreen() {
   return (
     <Screen centered>
       <View style={{ width: '100%', maxWidth: 360 }}>
+        <TouchableOpacity onPress={() => nav.goBack()} style={{ marginBottom: 28 }}>
+          <Text style={{ color: Colors.muted, fontSize: 14 }}>← Back</Text>
+          </TouchableOpacity>
         <Text style={styles.title}>Staff Login</Text>
 
         <Card>
